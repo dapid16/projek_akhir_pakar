@@ -6,19 +6,21 @@ st.set_page_config(
     layout="wide",
 )
 
+# Kodingan bersih tanpa load data solusi
 from core.data_loader import load_data, get_symptom_categories
 from core.engine import diagnose
 
 # =========================
 # LOAD DATA
 # =========================
-gejala_df, penyakit_df, rules_df, solusi_df = load_data()
+# Kita abaikan solusi_df, cuma load gejala, penyakit, dan rules sesuai orisinalitas jurnal
+gejala_df, penyakit_df, rules_df, _ = load_data()
 
 # =========================
 # HEADER
 # =========================
 st.title("🧅 Sistem Pakar Diagnosa Penyakit Bawang Merah")
-st.caption("Metode Forward Chaining + Certainty Factor")
+st.caption("Metode Forward Chaining + Certainty Factor (Pure Scientific Verification)")
 
 st.divider()
 
@@ -26,7 +28,8 @@ st.divider()
 # CERTAINTY OPTIONS
 # =========================
 certainty_options = {
-    "Tidak Yakin": 0.2,
+    "Tidak Yakin": 0.0,
+    "Sangat Tidak Tahu": 0.2,
     "Mungkin": 0.4,
     "Cukup Yakin": 0.6,
     "Yakin": 0.8,
@@ -36,7 +39,7 @@ certainty_options = {
 # =========================
 # INPUT GEJALA
 # =========================
-st.subheader("🩺 Pilih Gejala")
+st.subheader("🩺 Pilih Gejala Tanaman")
 
 categories = get_symptom_categories(
     gejala_df,
@@ -60,32 +63,40 @@ for cat_name, symptoms in categories.items():
 
             with col1:
                 checked = st.checkbox(
-                    f"{gid} - {nama_gejala}",
+                    f"**{gid}** - {nama_gejala}",
                     key=f"cb_{gid}"
                 )
 
             with col2:
-
-                selected_level = st.selectbox(
-                    f"Keyakinan {gid}",
-                    options=list(certainty_options.keys()),
-                    index=2,
-                    key=f"cf_{gid}",
-                    label_visibility="collapsed",
-                )
+                if checked:
+                    selected_level = st.selectbox(
+                        f"Keyakinan {gid}",
+                        options=list(certainty_options.keys()),
+                        index=0,
+                        key=f"cf_{gid}",
+                        label_visibility="collapsed",
+                    )
+                else:
+                    st.selectbox(
+                        f"Keyakinan {gid} (disabled)",
+                        options=["Tidak Yakin"],
+                        index=0,
+                        disabled=True,
+                        key=f"disabled_cf_{gid}",
+                        label_visibility="collapsed",
+                    )
 
             if checked:
                 selected_gejala.append(gid)
-
                 user_cf_map[gid] = certainty_options[selected_level]
 
 # =========================
-# VALIDASI
+# VALIDASI & RUN ENGINE
 # =========================
 st.divider()
 
 if len(selected_gejala) > 0:
-    st.success(f"{len(selected_gejala)} gejala dipilih")
+    st.success(f"🔥 {len(selected_gejala)} gejala aktif dipilih")
 
 if st.button(
     "🔍 Mulai Diagnosa",
@@ -95,114 +106,91 @@ if st.button(
 
     if len(selected_gejala) < 3:
         st.warning(
-            "Minimal pilih 3 gejala agar diagnosa lebih akurat."
+            "⚠️ Disarankan memilih minimal 3 gejala untuk hasil diagnosa yang lebih akurat. Silakan pilih lebih banyak gejala atau pastikan tingkat keyakinan sudah diatur dengan benar."
         )
 
     else:
+        valid_gejala = [gid for gid in selected_gejala if user_cf_map[gid] > 0.0]
 
-        hasil = diagnose(
-            selected_gejala=selected_gejala,
-            user_cf_map=user_cf_map,
-            rules_df=rules_df,
-            penyakit_df=penyakit_df,
-        )
-
-        if hasil is None:
-            st.error("Tidak ditemukan penyakit yang cocok.")
-
+        if not valid_gejala:
+            st.error("Semua gejala yang dipilih memiliki tingkat keyakinan 'Tidak Yakin'. Silakan pilih tingkat keyakinan yang lebih tinggi untuk setidaknya satu gejala.")
         else:
-
-            st.subheader("📊 Hasil Diagnosa")
-
-            utama = hasil[0]
-
-            st.success(
-                f"Penyakit utama: {utama['nama_penyakit']}"
+            hasil = diagnose(
+                selected_gejala=valid_gejala,
+                user_cf_map=user_cf_map,
+                rules_df=rules_df,
+                penyakit_df=penyakit_df,
             )
 
-            st.metric(
-                "Tingkat Keyakinan",
-                f"{utama['persentase']}%"
-            )
+            if hasil is None:
+                st.error("Maaf, tidak ditemukan kecocokan antara gejala yang dipilih dengan aturan yang ada. Coba pilih kombinasi gejala yang berbeda atau pastikan tingkat keyakinan sudah diatur dengan benar.")
 
-            st.progress(
-                min(int(utama["persentase"]), 100)
-            )
+            else:
+                st.subheader("📊 Hasil Analisis Diagnosa")
 
-            st.write("### Detail Rule")
+                utama = hasil[0]
 
-            st.write(
-                f"""
-                - Gejala cocok: {utama['matched_count']}
-                - Total rule: {utama['total_rule_gejala']}
-                - Kecocokan rule:
-                  {utama['match_percentage']}%
-                """
-            )
+                st.success(
+                    f"🏆 **DIAGNOSIS UTAMA:** Penyakit {utama['nama_penyakit']} ({utama['id_penyakit']})"
+                )
 
-            # =========================
-            # SOLUSI PENANGANAN
-            # =========================
-            solusi_row = solusi_df[
-                solusi_df["id_penyakit"]
-                == utama["id_penyakit"]
-            ]
+                st.metric(
+                    "Tingkat Kepastian (Certainty Factor)",
+                    f"{utama['persentase']:.2f}%"
+                )
 
-            if not solusi_row.empty:
+                st.progress(
+                    min(max(int(utama["persentase"]), 0), 100)
+                )
 
-                solusi = solusi_row.iloc[0]["solusi"]
+                st.write("### 📋 Detail Aturan (Rule Match)")
 
-                st.write("## 💊 Solusi Penanganan")
-
-                st.success(solusi)
-
-            # =========================
-            # GEJALA PENDUKUNG
-            # =========================
-            st.write("### Gejala yang Mendukung")
-
-            for item in utama["matched_gejala"]:
-
-                st.info(
+                st.write(
                     f"""
-                    {item['id_gejala']}
-                    | CF Pakar: {item['cf_pakar']}
-                    | CF User: {item['cf_user']}
-                    | Final: {round(item['cf_final'], 2)}
+                    - **Gejala yang cocok:** {utama['matched_count']} gejala
+                    - **Total aturan pada penyakit:** {utama['total_rule_gejala']} rule
+                    - **Persentase kecocokan aturan:** {utama['match_percentage']}%
                     """
                 )
 
-            # =========================
-            # PENYAKIT LAIN
-            # =========================
-            if len(hasil) > 1:
+                # =========================
+                # GEJALA PENDUKUNG
+                # =========================
+                st.write("### 🩺 Gejala yang Mendukung Analisis")
 
-                st.write("## Kemungkinan Penyakit Lain")
+                for item in utama["matched_gejala"]:
+                    st.info(
+                        f"""
+                        **Kode:** {item['id_gejala']}  
+                        | CF Pakar: `{item['cf_pakar']}`  
+                        | CF User: `{item['cf_user']}`  
+                        | Perhitungan Akhir: `{round(item['cf_final'], 2)}`
+                        """
+                    )
 
-                for item in hasil[1:]:
+                # =========================
+                # PENYAKIT LAIN
+                # =========================
+                if len(hasil) > 1:
+                    st.write("## 📋 Kemungkinan Jenis Penyakit Lain")
 
-                    with st.expander(
-                        f"{item['nama_penyakit']} "
-                        f"({item['persentase']}%)"
-                    ):
+                    for item in hasil[1:]:
+                        with st.expander(
+                            f"{item['nama_penyakit']} ({item['id_penyakit']}) — Tingkat Keyakinan: {item['persentase']:.2f}%"
+                        ):
 
-                        st.progress(
-                            min(int(item["persentase"]), 100)
-                        )
+                            st.progress(
+                                min(max(int(item["persentase"]), 0), 100)
+                            )
 
-                        st.write(
-                            f"""
-                            - Gejala cocok:
-                              {item['matched_count']}
-                            - Total rule:
-                              {item['total_rule_gejala']}
-                            - Persentase rule:
-                              {item['match_percentage']}%
-                            """
-                        )
+                            st.write(
+                                f"""
+                                - **Gejala cocok:** {item['matched_count']}
+                                - **Total rule penyakit:** {item['total_rule_gejala']}
+                                - **Persentase rule cocok:** {item['match_percentage']}%
+                                """
+                            )
 else:
-
     st.info(
-        "Pilih gejala terlebih dahulu "
-        "untuk memulai diagnosa."
+        "Silakan pilih gejala yang dialami tanaman bawang merah Anda di atas, lalu klik tombol 'Mulai Diagnosa' untuk melihat hasilnya!"
     )
