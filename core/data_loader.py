@@ -1,43 +1,46 @@
 import pandas as pd
-import streamlit as st
-import os
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
 
-@st.cache_data
 def load_data():
-    """Load all CSV data files and return as DataFrames."""
-    gejala_df = pd.read_csv(os.path.join(DATA_DIR, 'gejala.csv'))
-    penyakit_df = pd.read_csv(os.path.join(DATA_DIR, 'penyakit.csv'))
-    rules_df = pd.read_csv(os.path.join(DATA_DIR, 'rules.csv'))
-    return gejala_df, penyakit_df, rules_df
+
+    gejala_df = pd.read_csv("data/gejala.csv")
+    penyakit_df = pd.read_csv("data/penyakit.csv")
+    rules_df = pd.read_csv("data/rules.csv")
+    solusi_df = pd.read_csv("data/solusi.csv")
+
+    return (
+        gejala_df,
+        penyakit_df,
+        rules_df,
+        solusi_df,
+    )
 
 
-def get_symptom_categories(gejala_df, rules_df, penyakit_df):
-    """
-    Group symptoms by the body part / area of the plant they affect.
-    Returns a dict: { category_name: [(id_gejala, nama_gejala), ...] }
-    """
-    # Manual categorization based on symptom text for a clean UX
-    categories = {
-        "🌿 Gejala pada Daun": [],
-        "🧅 Gejala pada Umbi": [],
-        "🌱 Gejala pada Akar & Batang": [],
-        "🌾 Gejala pada Tanaman (Umum)": [],
-    }
+def get_symptom_categories(
+    gejala_df,
+    rules_df,
+    penyakit_df
+):
 
-    for _, row in gejala_df.iterrows():
-        gid = row['id_gejala']
-        name = row['nama_gejala']
-        name_lower = name.lower()
+    categories = {}
 
-        if any(k in name_lower for k in ['daun', 'bercak', 'miselium', 'spora', 'korokan']):
-            categories["🌿 Gejala pada Daun"].append((gid, name))
-        elif any(k in name_lower for k in ['umbi', 'lapisan']):
-            categories["🧅 Gejala pada Umbi"].append((gid, name))
-        elif any(k in name_lower for k in ['akar', 'batang', 'pangkal', 'puru']):
-            categories["🌱 Gejala pada Akar & Batang"].append((gid, name))
-        else:
-            categories["🌾 Gejala pada Tanaman (Umum)"].append((gid, name))
+    for _, penyakit in penyakit_df.iterrows():
+
+        pid = penyakit["id_penyakit"]
+
+        gejala_ids = rules_df[
+            rules_df["id_penyakit"] == pid
+        ]["id_gejala"].tolist()
+
+        gejala_filtered = gejala_df[
+            gejala_df["id_gejala"].isin(gejala_ids)
+        ]
+
+        categories[penyakit["nama_penyakit"]] = list(
+            zip(
+                gejala_filtered["id_gejala"],
+                gejala_filtered["nama_gejala"],
+            )
+        )
 
     return categories
