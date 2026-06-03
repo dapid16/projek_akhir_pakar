@@ -28,12 +28,11 @@ st.divider()
 # CERTAINTY OPTIONS
 # =========================
 certainty_options = {
-    "Tidak Yakin": 0.0,
-    "Sangat Tidak Tahu": 0.2,
-    "Mungkin": 0.4,
-    "Cukup Yakin": 0.6,
-    "Yakin": 0.8,
-    "Sangat Yakin": 1.0,
+    "Tidak Tahu / Unknow (0.2)": 0.2,
+    "Mungkin / Maybe (0.4)": 0.4,
+    "Kemungkinan Besar / Probably (0.6)": 0.6,
+    "Hampir Pasti / Almost Certainy (0.8)": 0.8,
+    "Pasti / Definitely (1.0)": 1.0,
 }
 
 # =========================
